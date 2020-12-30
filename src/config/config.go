@@ -23,11 +23,17 @@ type FSConfig struct {
 	CredPath   string
 }
 
-func Init() (conf *Configurations) {
+func initConfig() {
 	viper.SetConfigName("config")
 	viper.AddConfigPath("./config")
 	viper.AutomaticEnv()
 	viper.SetConfigType("yml")
+}
+
+func Parse() (conf *Configurations) {
+	log.Println("Parsing config file...")
+
+	initConfig()
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("Error reading config file, %s", err)
@@ -35,5 +41,6 @@ func Init() (conf *Configurations) {
 	if err := viper.Unmarshal(&conf); err != nil {
 		log.Fatalf("Unable to decode into struct, %v", err)
 	}
+	log.Println("Success!")
 	return
 }

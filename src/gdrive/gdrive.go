@@ -16,7 +16,8 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
-func ReadConfig(filepath string) (config *oauth2.Config) {
+func ValidateCredentials(filepath string) (config *oauth2.Config) {
+	log.Println("Authenticating Drive API...")
 	b, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
@@ -25,11 +26,26 @@ func ReadConfig(filepath string) (config *oauth2.Config) {
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
+	log.Println("Success!")
 	return
 }
 
+func GetService(config *oauth2.Config) *drive.Service {
+	log.Println("Generating client...")
+	client := getClient(config)
+	log.Println("Success!")
+
+	log.Println("Creating Drive service...")
+	srv, err := drive.New(client)
+	if err != nil {
+		log.Fatalf("Unable to retrieve Drive client: %v", err)
+	}
+	log.Println("Success!")
+	return srv
+}
+
 // Retrieve a token, saves the token, then returns the generated client.
-func GetClient(config *oauth2.Config) *http.Client {
+func getClient(config *oauth2.Config) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
@@ -46,7 +62,12 @@ func GetClient(config *oauth2.Config) *http.Client {
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Println("Opening authentication dialogue in browser")
-	openbrowser(authURL)
+
+	err := openbrowser(authURL)
+	if err != nil {
+		fmt.Printf("Go to the following link in your browser then type the "+
+			"authorization code: \n%v\n", authURL)
+	}
 
 	fmt.Println("Paste generated code to continue: ")
 	var authCode string
@@ -85,9 +106,7 @@ func saveToken(path string, token *oauth2.Token) {
 }
 
 // https://gist.github.com/hyg/9c4afcd91fe24316cbf0
-func openbrowser(url string) {
-	var err error
-
+func openbrowser(url string) (err error) {
 	switch runtime.GOOS {
 	case "linux":
 		err = exec.Command("xdg-open", url).Start()
@@ -98,7 +117,5 @@ func openbrowser(url string) {
 	default:
 		err = fmt.Errorf("unsupported platform")
 	}
-	if err != nil {
-		log.Fatal(err)
-	}
+	return
 }

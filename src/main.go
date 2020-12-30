@@ -1,7 +1,10 @@
 package main
 
 import (
+	// "encoding/json"
+
 	"fmt"
+	"io/ioutil"
 	"log"
 
 	"github.com/fsnotify/fsnotify"
@@ -10,44 +13,27 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
-func uploadToDrive() {
+const smallFileLimit = 5 << (10 * 2)
 
+// uploads a file to google drive
+func uploadToDrive(srv *drive.Service, content []byte) {
+	fmt.Printf("file content: %s, len: %v\n", content, len(content))
+	if len(content) <= smallFileLimit {
+		fmt.Println("Uploading to gdrive")
+	} else {
+		fmt.Println("Large file, not implemented yet")
+	}
 }
 
 func main() {
 
 	log.Println("Starting moodle-sync service...")
-	log.Println("Reading config file...")
 
-	appConfig := config.Init()
+	appConfig := config.Parse()
 
-	log.Println("Success!")
-	log.Println("Authenticating Drive API...")
+	driveConfig := gdrive.ValidateCredentials(appConfig.Local.CredPath)
 
-	driveConfig := gdrive.ReadConfig(appConfig.Local.CredPath)
-	log.Println("Success!")
-
-	client := gdrive.GetClient(driveConfig)
-
-	srv, err := drive.New(client)
-	if err != nil {
-		log.Fatalf("Unable to retrieve Drive client: %v", err)
-	}
-
-	// example interfacing with api
-	r, err := srv.Files.List().PageSize(10).
-		Fields("nextPageToken, files(id, name)").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve files: %v", err)
-	}
-	fmt.Println("Files:")
-	if len(r.Files) == 0 {
-		fmt.Println("No files found.")
-	} else {
-		for _, i := range r.Files {
-			fmt.Printf("%s (%s)\n", i.Name, i.Id)
-		}
-	}
+	srv := gdrive.GetService(driveConfig)
 
 	done := make(chan bool)
 	watcher, err := fsnotify.NewWatcher()
@@ -57,6 +43,7 @@ func main() {
 	}
 	defer watcher.Close()
 
+	log.Printf("Listening to changes in directory: %v\n", appConfig.Local.SyncFolder)
 	go func() {
 		for {
 			select {
@@ -65,10 +52,13 @@ func main() {
 					log.Fatal("Something went wrong reading event channel")
 					return
 				}
-				log.Println("event:", event)
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					log.Println("File added to directory!")
-					// upload to gdrive
+					content, err := ioutil.ReadFile(event.Name)
+					if err != nil {
+						log.Fatalf("Could not read file path supplied by callback")
+					}
+					uploadToDrive(srv, content)
 				}
 			}
 		}
