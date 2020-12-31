@@ -17,7 +17,7 @@ import (
 )
 
 // Upload uploads a file to Google Drive
-func Upload(srv *drive.Service, file *os.File, folderName string) {
+func Upload(srv *drive.Service, file *os.File, localPath, folderName string) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)
@@ -27,14 +27,14 @@ func Upload(srv *drive.Service, file *os.File, folderName string) {
 		// do something to handle directories
 	} else {
 		fmt.Println("uploading file...")
+		// show progress bar
 		folderID := getOrCreateFolder(srv, folderName)
-		fmt.Println(folderID)
-		createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
-		// if fileInfo.Size() <= smallFileLimit {
 
-		// } else {
-
-		// }
+		// TODO: dynamically detect mimeType
+		ok := createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
+		if ok {
+			deleteLocalFileDialog(localPath)
+		}
 	}
 }
 
@@ -68,6 +68,27 @@ func GetService(config *oauth2.Config) *drive.Service {
 	return srv
 }
 
+func deleteLocalFileDialog(filePath string) {
+	var input string
+	fmt.Println("Delete local file? (Y/N)")
+	for {
+		fmt.Scanln(&input)
+		if input == "Y" || input == "y" {
+			err := os.Remove(filePath)
+			if err != nil {
+				log.Println("Could not delete local file copy ", err)
+			} else {
+				log.Println("Successfully deleted file at ", filePath)
+			}
+			break
+		} else if input == "N" || input == "n" {
+			break
+		} else {
+			fmt.Println("Invalid input, select Y for yes and N for no...")
+		}
+	}
+}
+
 func getOrCreateFolder(srv *drive.Service, foldername string) (folderID string) {
 	folderID, found := findFolder(srv, foldername)
 	if !found {
@@ -84,17 +105,17 @@ func findFolder(srv *drive.Service, foldername string) (folderID string, found b
 	} else {
 		found = true
 		folderID = fileList.Files[0].Id
-		fmt.Println("folderID: ", folderID)
 	}
 	return
 }
 
 func createFolder() string {
+	// TODO
 	return ""
 }
 
 func createFile(service *drive.Service, file *os.File,
-	filename string, mimeType string, parentID string) {
+	filename string, mimeType string, parentID string) (ok bool) {
 	fileMetadata := &drive.File{
 		Name:     filename,
 		MimeType: mimeType,
@@ -108,7 +129,9 @@ func createFile(service *drive.Service, file *os.File,
 		log.Println("Could not create file in Google Drive: ", err)
 	} else {
 		log.Println("Success!")
+		ok = true
 	}
+	return
 }
 
 // Retrieve a token, saves the token, then returns the generated client.

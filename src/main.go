@@ -22,7 +22,7 @@ func chooseUploadFolder(folderList []string) (foldername string) {
 			fmt.Printf("[%v] %v\n", idx, course)
 		}
 		fmt.Scanln(&input)
-		folderIdx, err := strconv.ParseInt(input, 10, 2)
+		folderIdx, err := strconv.ParseInt(input, 10, 64)
 		if err != nil {
 			log.Printf("Invalid input: %v\n", err)
 		} else if 0 > folderIdx || int(folderIdx) >= len(folderList) {
@@ -72,7 +72,7 @@ func main() {
 					}
 					dest := chooseUploadFolder(courseList)
 					log.Println("Selected folder: ", dest)
-					gdrive.Upload(srv, file, dest)
+					gdrive.Upload(srv, file, event.Name, dest)
 				}
 			}
 		}
