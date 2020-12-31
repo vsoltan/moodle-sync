@@ -14,7 +14,7 @@ import (
 const smallFileLimit = 5 << (10 * 2)
 
 // TODO: make folderIdx an int
-func chooseUploadFolder(folderList []string) (folderIdx int64) {
+func chooseUploadFolder(folderList []string) (foldername string) {
 	var input string
 	for {
 		fmt.Println("Upload material to folder: ")
@@ -28,7 +28,7 @@ func chooseUploadFolder(folderList []string) (folderIdx int64) {
 		} else if 0 > folderIdx || int(folderIdx) >= len(folderList) {
 			log.Println("Invalid input: index out of bounds")
 		} else {
-			return folderIdx
+			return folderList[folderIdx]
 		}
 	}
 }
@@ -66,12 +66,13 @@ func main() {
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					log.Printf("File %v has been added to directory!\n", event.Name)
 					file, err := os.Open(event.Name)
+					defer file.Close()
 					if err != nil {
 						log.Fatalf("Could not read file path supplied by callback")
 					}
-					folderID := chooseUploadFolder(courseList)
-					log.Println("Selected folder: ", courseList[folderID])
-					gdrive.Upload(srv, file)
+					dest := chooseUploadFolder(courseList)
+					log.Println("Selected folder: ", dest)
+					gdrive.Upload(srv, file, dest)
 				}
 			}
 		}

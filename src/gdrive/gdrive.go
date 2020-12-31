@@ -17,7 +17,7 @@ import (
 )
 
 // Upload uploads a file to Google Drive
-func Upload(srv *drive.Service, file *os.File) {
+func Upload(srv *drive.Service, file *os.File, folderName string) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)
@@ -27,7 +27,9 @@ func Upload(srv *drive.Service, file *os.File) {
 		// do something to handle directories
 	} else {
 		fmt.Println("uploading file...")
-		createFile(srv, file, "text/plain", "")
+		folderID := getOrCreateFolder(srv, folderName)
+		fmt.Println(folderID)
+		createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
 		// if fileInfo.Size() <= smallFileLimit {
 
 		// } else {
@@ -43,7 +45,7 @@ func ValidateCredentials(filepath string) (config *oauth2.Config) {
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
-	config, err = google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+	config, err = google.ConfigFromJSON(b, drive.DriveScope, drive.DriveFileScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
@@ -66,32 +68,44 @@ func GetService(config *oauth2.Config) *drive.Service {
 	return srv
 }
 
-func GetOrCreateFolder(foldername string) (folderID string) {
-	folderID, found := findFolderWith(foldername)
+func getOrCreateFolder(srv *drive.Service, foldername string) (folderID string) {
+	folderID, found := findFolder(srv, foldername)
 	if !found {
-
+		folderID = createFolder()
 	}
 	return
 }
 
-func findFolderWith(foldername string) (folderID string, found bool) {
+func findFolder(srv *drive.Service, foldername string) (folderID string, found bool) {
+	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", foldername)
+	fileList, err := srv.Files.List().Q(q).Do()
+	if err != nil {
+		log.Println("Unable to find folder with name: ", foldername)
+	} else {
+		found = true
+		folderID = fileList.Files[0].Id
+		fmt.Println("folderID: ", folderID)
+	}
 	return
 }
 
-func createFolder() {
-
+func createFolder() string {
+	return ""
 }
 
 func createFile(service *drive.Service, file *os.File,
-	mimeType string, parentID string) {
+	filename string, mimeType string, parentID string) {
 	fileMetadata := &drive.File{
+		Name:     filename,
 		MimeType: mimeType,
-		Parents:  []string{parentID},
+	}
+	if parentID != "" {
+		fileMetadata.Parents = []string{parentID}
 	}
 	_, err := service.Files.Create(fileMetadata).Media(file).Context(context.Background()).Do()
 
 	if err != nil {
-		log.Println("Could not create file in Drive: ", err)
+		log.Println("Could not create file in Google Drive: ", err)
 	} else {
 		log.Println("Success!")
 	}
