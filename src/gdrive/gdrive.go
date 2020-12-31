@@ -16,6 +16,27 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
+// Upload uploads a file to Google Drive
+func Upload(srv *drive.Service, file *os.File) {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if fileInfo.IsDir() {
+		// do something to handle directories
+	} else {
+		fmt.Println("uploading file...")
+		createFile(srv, file, "text/plain", "")
+		// if fileInfo.Size() <= smallFileLimit {
+
+		// } else {
+
+		// }
+	}
+}
+
+// ValidateCredentials reads the client secret file and parses it to generate a config struct
 func ValidateCredentials(filepath string) (config *oauth2.Config) {
 	log.Println("Authenticating Drive API...")
 	b, err := ioutil.ReadFile(filepath)
@@ -30,6 +51,7 @@ func ValidateCredentials(filepath string) (config *oauth2.Config) {
 	return
 }
 
+// GetService generates an access client to Google Drive API and creates a new service instance
 func GetService(config *oauth2.Config) *drive.Service {
 	log.Println("Generating client...")
 	client := getClient(config)
@@ -42,6 +64,37 @@ func GetService(config *oauth2.Config) *drive.Service {
 	}
 	log.Println("Success!")
 	return srv
+}
+
+func GetOrCreateFolder(foldername string) (folderID string) {
+	folderID, found := findFolderWith(foldername)
+	if !found {
+
+	}
+	return
+}
+
+func findFolderWith(foldername string) (folderID string, found bool) {
+	return
+}
+
+func createFolder() {
+
+}
+
+func createFile(service *drive.Service, file *os.File,
+	mimeType string, parentID string) {
+	fileMetadata := &drive.File{
+		MimeType: mimeType,
+		Parents:  []string{parentID},
+	}
+	_, err := service.Files.Create(fileMetadata).Media(file).Context(context.Background()).Do()
+
+	if err != nil {
+		log.Println("Could not create file in Drive: ", err)
+	} else {
+		log.Println("Success!")
+	}
 }
 
 // Retrieve a token, saves the token, then returns the generated client.

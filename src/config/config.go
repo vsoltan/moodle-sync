@@ -6,18 +6,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Configurations exported
+// Configurations contains user-specific information for sync service
 type Configurations struct {
 	Drive GDriveConfig
 	Local FSConfig
 }
 
+// GDriveConfig defines a struct for relevant Google Drive details
 type GDriveConfig struct {
 	Root     string
 	Year     string
 	Semester string
+	Courses  []string
 }
 
+// FSConfig defines a struct for local filesystem requirements for sync service
 type FSConfig struct {
 	SyncFolder string
 	CredPath   string
@@ -30,6 +33,7 @@ func initConfig() {
 	viper.SetConfigType("yml")
 }
 
+// Parse reads the specified config file and decodes it into a struct for future use
 func Parse() (conf *Configurations) {
 	log.Println("Parsing config file...")
 

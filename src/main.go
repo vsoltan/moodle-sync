@@ -1,27 +1,35 @@
 package main
 
 import (
-	// "encoding/json"
-
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/vsoltan/moodle-sync/src/config"
 	"github.com/vsoltan/moodle-sync/src/gdrive"
-	"google.golang.org/api/drive/v3"
 )
 
 const smallFileLimit = 5 << (10 * 2)
 
-// uploads a file to google drive
-func uploadToDrive(srv *drive.Service, content []byte) {
-	fmt.Printf("file content: %s, len: %v\n", content, len(content))
-	if len(content) <= smallFileLimit {
-		fmt.Println("Uploading to gdrive")
-	} else {
-		fmt.Println("Large file, not implemented yet")
+// TODO: make folderIdx an int
+func chooseUploadFolder(folderList []string) (folderIdx int64) {
+	var input string
+	for {
+		fmt.Println("Upload material to folder: ")
+		for idx, course := range folderList {
+			fmt.Printf("[%v] %v\n", idx, course)
+		}
+		fmt.Scanln(&input)
+		folderIdx, err := strconv.ParseInt(input, 10, 2)
+		if err != nil {
+			log.Printf("Invalid input: %v\n", err)
+		} else if 0 > folderIdx || int(folderIdx) >= len(folderList) {
+			log.Println("Invalid input: index out of bounds")
+		} else {
+			return folderIdx
+		}
 	}
 }
 
@@ -43,7 +51,10 @@ func main() {
 	}
 	defer watcher.Close()
 
-	log.Printf("Listening to changes in directory: %v\n", appConfig.Local.SyncFolder)
+	syncDir := appConfig.Local.SyncFolder
+	courseList := appConfig.Drive.Courses
+
+	log.Printf("Listening to changes in directory: %v\n", syncDir)
 	go func() {
 		for {
 			select {
@@ -53,16 +64,18 @@ func main() {
 					return
 				}
 				if event.Op&fsnotify.Create == fsnotify.Create {
-					log.Println("File added to directory!")
-					content, err := ioutil.ReadFile(event.Name)
+					log.Printf("File %v has been added to directory!\n", event.Name)
+					file, err := os.Open(event.Name)
 					if err != nil {
 						log.Fatalf("Could not read file path supplied by callback")
 					}
-					uploadToDrive(srv, content)
+					folderID := chooseUploadFolder(courseList)
+					log.Println("Selected folder: ", courseList[folderID])
+					gdrive.Upload(srv, file)
 				}
 			}
 		}
 	}()
-	err = watcher.Add(appConfig.Local.SyncFolder)
+	err = watcher.Add(syncDir)
 	<-done
 }
