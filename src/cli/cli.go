@@ -15,8 +15,8 @@ func ChooseUploadFolder(folderList []string) (folderName string) {
 	var input string
 	for {
 		fmt.Println("Upload file to folder: ")
-		for idx, course := range folderList {
-			fmt.Printf("[%v] %v\n", idx, course)
+		for idx, folder := range folderList {
+			fmt.Printf("[%v] %v\n", idx, folder)
 		}
 		fmt.Scanln(&input)
 		folderIdx, err := strconv.ParseInt(input, 10, 64)

@@ -11,75 +11,30 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/gabriel-vasile/mimetype"
-	"github.com/vsoltan/moodle-sync/src/cli"
-
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 )
 
-const smallFileLimit = 5 << (10 * 2)
-const folderMimeType = "application/vnd.google-apps.folder"
-
-// Upload uploads a file/directory to a folder in Google Drive; My Drive (root) if folderID empty
-func Upload(srv *drive.Service, file *os.File, localPath, folderID string) (err error) {
+// Upload uploads a file to Google Drive
+func Upload(srv *drive.Service, file *os.File, localPath, folderID string) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("size of file: ", fileInfo.Size())
+
 	if fileInfo.IsDir() {
-		fmt.Println("uploading folder...")
-		err = uploadFolder(srv, file, localPath, folderID)
+		// do something to handle directories
 	} else {
 		fmt.Println("uploading file...")
+		// show progress bar
 
-		var fileType string
-		fileType, err = getFileContentType(file)
-		if err != nil {
-			log.Println("Could not detect file type")
-			return
-		}
-		fmt.Println("fileType ", fileType)
-		_, err = createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
-	}
-	if err != nil {
-		log.Println("Could not perform specified upload: ", err)
-	} else {
-		cli.DeleteLocalFileDialog(localPath)
-	}
-	return
-}
-
-func getFileContentType(file *os.File) (string, error) {
-	mime, err := mimetype.DetectReader(file)
-	if err != nil {
-		log.Println("Failed to identify content type ", err)
-	}
-	return mime.String(), err
-}
-
-func uploadFolder(srv *drive.Service, dir *os.File, localPath,
-	parentID string) (err error) {
-	fileInfoList, err := dir.Readdir(-1)
-	if err != nil {
-		log.Fatalln("Could not read directory contents ", err)
-	}
-	var childPath string
-	var childFile *os.File
-	for _, fileInfo := range fileInfoList {
-		childPath = localPath + "/" + fileInfo.Name()
-		childFile, err = os.Open(childPath)
-		if err != nil {
-		} // TODO: handle this case
-		err = Upload(srv, childFile, childPath, parentID)
-		if err != nil {
-			fmt.Println("Failed to upload file as part of directory")
-			return
+		// TODO: dynamically detect mimeType
+		ok := createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
+		if ok {
+			deleteLocalFileDialog(localPath)
 		}
 	}
-	return
 }
 
 // ValidateCredentials reads the client secret file and parses it to generate a config struct
@@ -112,55 +67,74 @@ func GetService(config *oauth2.Config) *drive.Service {
 	return srv
 }
 
-func GetOrCreateFolder(srv *drive.Service, folderName string) (folderID string, err error) {
-	folderID, err = findFolder(srv, folderName)
-	if err != nil {
-
+func deleteLocalFileDialog(filePath string) {
+	var input string
+	fmt.Println("Delete local file? (Y/N)")
+	for {
+		fmt.Scanln(&input)
+		if input == "Y" || input == "y" {
+			err := os.Remove(filePath)
+			if err != nil {
+				log.Println("Could not delete local file copy ", err)
+			} else {
+				log.Println("Successfully deleted file at ", filePath)
+			}
+			break
+		} else if input == "N" || input == "n" {
+			break
+		} else {
+			fmt.Println("Invalid input, select Y for yes and N for no...")
+		}
 	}
-	if err != nil {
-		folderID, err = createFolder(srv, nil, folderName, "")
+}
+
+func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, err error) {
+	folderID, found := findFolder(srv, foldername)
+	if !found {
+		log.Printf("Folder with name %v not found!", foldername)
+		folderID, err = createFolder()
 		if err != nil {
-			log.Println("Could not create folder")
+			log.Println("Could not create a new folder: ", err)
 		}
 	}
 	return
 }
 
-func findFolder(srv *drive.Service, folderName string) (folderID string, err error) {
-	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", folderName)
+func findFolder(srv *drive.Service, foldername string) (folderID string, found bool) {
+	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", foldername)
 	fileList, err := srv.Files.List().Q(q).Do()
 	if err != nil {
-		log.Println("Unable to find folder with name: ", folderName)
+		log.Println("Unable to find folder with name: ", foldername)
 	} else {
+		found = true
 		folderID = fileList.Files[0].Id
 	}
 	return
 }
 
+func createFolder() (folderID string, err error) {
+	// TODO
+	return "", err
+}
+
 func createFile(service *drive.Service, file *os.File,
-	fileName string, mimeType string, parentID string) (fileID string, err error) {
-	fmt.Println("yo from createFile", mimeType)
+	filename string, mimeType string, parentID string) (ok bool) {
 	fileMetadata := &drive.File{
-		Name:     fileName,
+		Name:     filename,
 		MimeType: mimeType,
 	}
 	if parentID != "" {
 		fileMetadata.Parents = []string{parentID}
 	}
-	newFile, err := service.Files.Create(fileMetadata).Media(file).Context(context.Background()).Do()
+	_, err := service.Files.Create(fileMetadata).Media(file).Context(context.Background()).Do()
 
 	if err != nil {
 		log.Println("Could not create file in Google Drive: ", err)
 	} else {
-		fileID = newFile.Id
 		log.Println("Success!")
+		ok = true
 	}
 	return
-}
-
-func createFolder(srv *drive.Service, contents *os.File, folderName,
-	parentID string) (folderID string, err error) {
-	return createFile(srv, contents, folderName, folderMimeType, parentID)
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
