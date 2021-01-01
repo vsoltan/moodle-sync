@@ -1,37 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/vsoltan/moodle-sync/src/cli"
 	"github.com/vsoltan/moodle-sync/src/config"
 	"github.com/vsoltan/moodle-sync/src/gdrive"
 )
-
-const smallFileLimit = 5 << (10 * 2)
-
-// TODO: make folderIdx an int
-func chooseUploadFolder(folderList []string) (foldername string) {
-	var input string
-	for {
-		fmt.Println("Upload material to folder: ")
-		for idx, course := range folderList {
-			fmt.Printf("[%v] %v\n", idx, course)
-		}
-		fmt.Scanln(&input)
-		folderIdx, err := strconv.ParseInt(input, 10, 64)
-		if err != nil {
-			log.Printf("Invalid input: %v\n", err)
-		} else if 0 > folderIdx || int(folderIdx) >= len(folderList) {
-			log.Println("Invalid input: index out of bounds")
-		} else {
-			return folderList[folderIdx]
-		}
-	}
-}
 
 func main() {
 
@@ -47,12 +24,11 @@ func main() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 	defer watcher.Close()
 
 	syncDir := appConfig.Local.SyncFolder
-	courseList := appConfig.Drive.Courses
+	folderList := appConfig.Drive.Folders
 
 	log.Printf("Listening to changes in directory: %v\n", syncDir)
 	go func() {
@@ -61,18 +37,19 @@ func main() {
 			case event, ok := <-watcher.Events:
 				if !ok {
 					log.Fatal("Something went wrong reading event channel")
-					return
 				}
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					log.Printf("File %v has been added to directory!\n", event.Name)
 					file, err := os.Open(event.Name)
-					defer file.Close()
 					if err != nil {
 						log.Fatalf("Could not read file path supplied by callback")
 					}
-					dest := chooseUploadFolder(courseList)
-					log.Println("Selected folder: ", dest)
-					gdrive.Upload(srv, file, event.Name, dest)
+					defer file.Close()
+					folderName := cli.ChooseUploadFolder(folderList)
+					log.Println("Selected folder: ", folderName)
+					folderID, err := gdrive.GetOrCreateFolder(srv, folderName)
+					log.Println("Folder Id: ", folderID)
+					gdrive.Upload(srv, file, event.Name, folderID)
 				}
 			}
 		}

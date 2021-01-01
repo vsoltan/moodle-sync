@@ -14,10 +14,7 @@ type Configurations struct {
 
 // GDriveConfig defines a struct for relevant Google Drive details
 type GDriveConfig struct {
-	Root     string
-	Year     string
-	Semester string
-	Courses  []string
+	Folders []string
 }
 
 // FSConfig defines a struct for local filesystem requirements for sync service
