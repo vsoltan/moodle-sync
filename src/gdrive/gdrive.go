@@ -8,33 +8,20 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"runtime"
+	"strings"
 
+	"github.com/vsoltan/moodle-sync/src/cli"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 )
 
-// Upload uploads a file to Google Drive
-func Upload(srv *drive.Service, file *os.File, localPath, folderID string) {
-	fileInfo, err := file.Stat()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if fileInfo.IsDir() {
-		// do something to handle directories
-	} else {
-		fmt.Println("uploading file...")
-		// show progress bar
-
-		// TODO: dynamically detect mimeType
-		ok := createFile(srv, file, fileInfo.Name(), "text/plain", folderID)
-		if ok {
-			deleteLocalFileDialog(localPath)
-		}
-	}
+var mimeTypes = map[string]string{
+	"txt": "text/plain",
+	"pdf": "application/pdf",
+	"png": "image/png",
+	"csv": "text/csv",
+	"doc": "application/msword",
 }
 
 // ValidateCredentials reads the client secret file and parses it to generate a config struct
@@ -67,27 +54,7 @@ func GetService(config *oauth2.Config) *drive.Service {
 	return srv
 }
 
-func deleteLocalFileDialog(filePath string) {
-	var input string
-	fmt.Println("Delete local file? (Y/N)")
-	for {
-		fmt.Scanln(&input)
-		if input == "Y" || input == "y" {
-			err := os.Remove(filePath)
-			if err != nil {
-				log.Println("Could not delete local file copy ", err)
-			} else {
-				log.Println("Successfully deleted file at ", filePath)
-			}
-			break
-		} else if input == "N" || input == "n" {
-			break
-		} else {
-			fmt.Println("Invalid input, select Y for yes and N for no...")
-		}
-	}
-}
-
+// GetOrCreateFolder retrieves a folder's ID if it exists or creates a new one in Google Drive
 func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, err error) {
 	folderID, found := findFolder(srv, foldername)
 	if !found {
@@ -100,21 +67,41 @@ func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, 
 	return
 }
 
-func findFolder(srv *drive.Service, foldername string) (folderID string, found bool) {
-	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", foldername)
-	fileList, err := srv.Files.List().Q(q).Do()
+// Upload uploads a file to Google Drive
+func Upload(srv *drive.Service, file *os.File, localPath, folderID string) {
+	fileInfo, err := file.Stat()
 	if err != nil {
-		log.Println("Unable to find folder with name: ", foldername)
-	} else {
-		found = true
-		folderID = fileList.Files[0].Id
+		log.Fatal(err)
 	}
-	return
+
+	if fileInfo.IsDir() {
+		// do something to handle directories
+	} else {
+		fmt.Println("uploading file...")
+		// show progress bar
+
+		mimeType := getContentType(localPath)
+		ok := createFile(srv, file, fileInfo.Name(), mimeType, folderID)
+		if ok {
+			cli.DeleteLocalFileDialog(localPath)
+		}
+	}
 }
 
-func createFolder() (folderID string, err error) {
-	// TODO
-	return "", err
+// dynamically determines the content type by looking at the file's extension
+func getContentType(path string) (contentType string) {
+	splitPath := strings.Split(path, ".")
+	if len(splitPath) == 0 {
+		return "application/octet-stream"
+	}
+	ext := splitPath[len(splitPath)-1]
+	fmt.Println("ext", ext)
+	contentType, ok := mimeTypes[ext]
+	if !ok {
+		return "application/octet-stream"
+	}
+	fmt.Println("contentType", contentType)
+	return
 }
 
 func createFile(service *drive.Service, file *os.File,
@@ -137,6 +124,27 @@ func createFile(service *drive.Service, file *os.File,
 	return
 }
 
+func findFolder(srv *drive.Service, foldername string) (folderID string, found bool) {
+	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", foldername)
+	fileList, err := srv.Files.List().Q(q).Do()
+	if err != nil {
+		log.Println("Unable to find folder with name: ", foldername)
+	} else {
+		found = true
+		folderID = fileList.Files[0].Id
+	}
+	return
+}
+
+func createFolder() (folderID string, err error) {
+	// TODO
+	return "", err
+}
+
+/*
+ * API authentication: https://developers.google.com/drive/api/v3/quickstart/go
+ */
+
 // Retrieve a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is
@@ -156,7 +164,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Println("Opening authentication dialogue in browser")
 
-	err := openbrowser(authURL)
+	err := cli.OpenBrowser(authURL)
 	if err != nil {
 		fmt.Printf("Go to the following link in your browser then type the "+
 			"authorization code: \n%v\n", authURL)
@@ -196,19 +204,4 @@ func saveToken(path string, token *oauth2.Token) {
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
-}
-
-// https://gist.github.com/hyg/9c4afcd91fe24316cbf0
-func openbrowser(url string) (err error) {
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	return
 }
