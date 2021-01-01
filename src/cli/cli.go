@@ -35,7 +35,7 @@ func ChooseUploadFolder(folderList []string) (folderName string) {
 // DeleteLocalFileDialog opens a dialog to delete local copy of the file after upload
 func DeleteLocalFileDialog(filePath string) {
 	var input string
-	fmt.Println("Delete local file? (y/n)")
+	fmt.Printf("Delete file with path %v? (y/n)\n", filePath)
 	for {
 		fmt.Scanln(&input)
 		input = strings.ToLower(input)
