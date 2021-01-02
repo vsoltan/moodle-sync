@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	googleapi "google.golang.org/api/googleapi"
-
 	"github.com/vsoltan/moodle-sync/src/cli"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -129,19 +127,16 @@ func uploadFile(srv *drive.Service, file *os.File,
 	req := srv.Files.Create(fileMetadata)
 	if file != nil {
 		if fileInfo.Size() > smallFileSizeLimit {
-			fmt.Println("Uploaded a LARGE file")
-			req.ResumableMedia(context.Background(), file, googleapi.DefaultUploadChunkSize, mimeType).
+			req.ResumableMedia(context.Background(), file, fileInfo.Size(), mimeType).
 				ProgressUpdater(func(current, total int64) {
-					fmt.Printf("Uploaded %v bytes out of %v", current, total)
+					cli.RenderProgressBar(current, total)
 				})
-			// set callpack for progress and pass to cli pbar renderer
 		} else {
-			req.Media(file)
+			req.Media(file).
+				Context(context.Background())
 		}
 	}
-	req.Context(context.Background())
 
-	// TODO show progress bar
 	var newFile *drive.File
 	newFile, err = req.Do()
 

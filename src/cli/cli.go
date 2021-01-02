@@ -10,19 +10,30 @@ import (
 	"strings"
 )
 
-func RenderProgressBar(current, total int64) {
+const progressBarLen = 20
 
+// RenderProgressBar implementation of ProgressUpdater callback for ResumableMedia
+func RenderProgressBar(current, total int64) {
+	ratio := float64(current) / float64(total)
+	width := int(ratio * progressBarLen)
+	percentComplete := int(ratio * 100)
+	progressBar := ("(" + strings.Repeat("#", width) + strings.Repeat(" ", progressBarLen-width) + ")")
+	if width == progressBarLen {
+		fmt.Printf("%v, %02d%%, %d / %d bytes\n", progressBar, percentComplete, current, total)
+	} else {
+		fmt.Printf("%v, %02d%%, %d / %d bytes\r", progressBar, percentComplete, current, total)
+	}
 }
 
 // ChooseUploadFolder opens a dialog to select the upload destination folder
 func ChooseUploadFolder(folderList []string) (folderName string) {
 	var input string
 	for {
-		fmt.Println("Upload file to folder: ")
 		for idx, folder := range folderList {
 			fmt.Printf("[%v] %v\n", idx, folder)
 		}
-		fmt.Scanln(&input)
+		fmt.Print("Upload file to folder: ")
+		fmt.Scan(&input)
 		folderIdx, err := strconv.ParseInt(input, 10, 64)
 		if err != nil {
 			log.Printf("Invalid input: %v\n", err)
@@ -37,9 +48,9 @@ func ChooseUploadFolder(folderList []string) (folderName string) {
 // DeleteLocalFileDialog opens a dialog to delete local copy of the file after upload
 func DeleteLocalFileDialog(filePath string) {
 	var input string
-	fmt.Printf("Delete file with path %v? (y/n)\n", filePath)
+	fmt.Printf("Delete file with path %v? (y/n):\n", filePath)
 	for {
-		fmt.Scanln(&input)
+		fmt.Scan(&input)
 		input = strings.ToLower(input)
 		if input == "y" {
 			err := os.RemoveAll(filePath)
@@ -47,6 +58,7 @@ func DeleteLocalFileDialog(filePath string) {
 				log.Println("Could not delete local file copy ", err)
 			} else {
 				log.Println("Successfully deleted file at ", filePath)
+				fmt.Println("Listening...")
 			}
 			break
 		} else if input == "n" {
