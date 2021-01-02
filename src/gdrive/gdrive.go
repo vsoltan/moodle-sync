@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+
+	googleapi "google.golang.org/api/googleapi"
 
 	"github.com/vsoltan/moodle-sync/src/cli"
 	"golang.org/x/oauth2"
@@ -16,6 +19,7 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
+const smallFileSizeLimit = 5 << (10 * 2)
 const gdriveFolderMimeType = "application/vnd.google-apps.folder"
 
 var mimeTypes = map[string]string{
@@ -60,9 +64,12 @@ func GetService(config *oauth2.Config) *drive.Service {
 func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, err error) {
 	folderID, found := findFolder(srv, foldername)
 	if !found {
+
+	}
+	if !found {
 		log.Printf("Folder with name %v not found!", foldername)
 
-		folderID, err = createFolder(srv, nil, foldername, "", "")
+		folderID, err = createFolder(srv, foldername, "")
 		if err != nil {
 			log.Println("Could not create a new folder: ", err)
 		}
@@ -71,23 +78,20 @@ func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, 
 }
 
 // Upload uploads a file to Google Drive
-func Upload(srv *drive.Service, file *os.File, localPath, folderID string) (err error) {
+func Upload(srv *drive.Service, wg *sync.WaitGroup, file *os.File, localPath, folderID string) (err error) {
+	if wg != nil {
+		defer wg.Done()
+	}
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	if fileInfo.IsDir() {
-		_, err := createFolder(srv, file, fileInfo.Name(), localPath, folderID)
-		if err != nil {
-
-		}
+		_, err = uploadFolder(srv, file, localPath, folderID)
 	} else {
-		fmt.Println("uploading file...")
-		// show progress bar
-
+		fmt.Println("Uploading file with path: ", localPath)
 		mimeType := getContentType(localPath)
-		_, err = createFile(srv, file, fileInfo.Name(), mimeType, folderID)
+		_, err = uploadFile(srv, file, mimeType, folderID)
 	}
 	return
 }
@@ -99,52 +103,69 @@ func getContentType(path string) (contentType string) {
 		return "application/octet-stream"
 	}
 	ext := splitPath[len(splitPath)-1]
-	fmt.Println("ext", ext)
 	contentType, ok := mimeTypes[ext]
 	if !ok {
 		return "application/octet-stream"
 	}
-	fmt.Println("contentType", contentType)
 	return
 }
 
-func createFile(srv *drive.Service, file *os.File,
-	filename, mimeType, parentID string) (fileID string, err error) {
+func uploadFile(srv *drive.Service, file *os.File,
+	mimeType, parentID string) (fileID string, err error) {
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
 	fileMetadata := &drive.File{
-		Name:     filename,
+		Name:     fileInfo.Name(),
 		MimeType: mimeType,
 	}
 	if parentID != "" {
 		fileMetadata.Parents = []string{parentID}
 	}
 
-	var fileInfo *drive.File
-	if file == nil {
-		fileInfo, err = srv.Files.Create(fileMetadata).Context(context.Background()).Do()
-	} else {
-		fileInfo, err = srv.Files.Create(fileMetadata).Media(file).Context(context.Background()).Do()
+	// construct request to the API depending on file properties
+	req := srv.Files.Create(fileMetadata)
+	if file != nil {
+		if fileInfo.Size() > smallFileSizeLimit {
+			fmt.Println("Uploaded a LARGE file")
+			req.ResumableMedia(context.Background(), file, googleapi.DefaultUploadChunkSize, mimeType).
+				ProgressUpdater(func(current, total int64) {
+					fmt.Printf("Uploaded %v bytes out of %v", current, total)
+				})
+			// set callpack for progress and pass to cli pbar renderer
+		} else {
+			req.Media(file)
+		}
 	}
+	req.Context(context.Background())
+
+	// TODO show progress bar
+	var newFile *drive.File
+	newFile, err = req.Do()
 
 	if err != nil {
 		log.Println("Could not create file in Google Drive: ", err)
 	} else {
-		fileID = fileInfo.Id
+		fileID = newFile.Id
 		log.Println("Success!")
 	}
 	return
 }
 
-func createFolder(srv *drive.Service, file *os.File, foldername,
+func uploadFolder(srv *drive.Service, file *os.File,
 	folderPath, parentID string) (folderID string, err error) {
 
-	// create parent directory
-	folderID, err = createFile(srv, nil, foldername, gdriveFolderMimeType, parentID)
+	fileInfo, err := file.Stat()
 	if err != nil {
-		log.Println("Could not create parent directory: ", err)
-		return
+		log.Fatal(err)
 	}
 
-	if file == nil { // creating an empty folder
+	folderID, err = createFolder(srv, fileInfo.Name(), parentID)
+
+	if err != nil {
+		log.Println("Could not create parent directory: ", err)
 		return
 	}
 
@@ -156,12 +177,33 @@ func createFolder(srv *drive.Service, file *os.File, foldername,
 	}
 	var entryPath string
 	var entry *os.File
+
+	var wg sync.WaitGroup
 	for _, fileInfo := range fileInfoList {
 		entryPath = folderPath + "/" + fileInfo.Name()
-		fmt.Println("Uploading file with path: ", entryPath)
 		entry, err = os.Open(entryPath)
-		Upload(srv, entry, entryPath, folderID)
+		wg.Add(1)
+		go Upload(srv, &wg, entry, entryPath, folderID)
 	}
+	wg.Wait()
+	return
+}
+
+func createFolder(srv *drive.Service, foldername,
+	parentID string) (folderID string, err error) {
+
+	folderMetadata := &drive.File{
+		Name:     foldername,
+		MimeType: gdriveFolderMimeType,
+	}
+	if parentID != "" {
+		folderMetadata.Parents = []string{parentID}
+	}
+	folderInfo, err := srv.Files.Create(folderMetadata).Do()
+	if err != nil {
+		log.Fatal(err)
+	}
+	folderID = folderInfo.Id
 	return
 }
 

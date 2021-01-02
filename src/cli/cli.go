@@ -10,7 +10,9 @@ import (
 	"strings"
 )
 
-// Progress Bar
+func RenderProgressBar(current, total int64) {
+
+}
 
 // ChooseUploadFolder opens a dialog to select the upload destination folder
 func ChooseUploadFolder(folderList []string) (folderName string) {
@@ -40,7 +42,7 @@ func DeleteLocalFileDialog(filePath string) {
 		fmt.Scanln(&input)
 		input = strings.ToLower(input)
 		if input == "y" {
-			err := os.Remove(filePath)
+			err := os.RemoveAll(filePath)
 			if err != nil {
 				log.Println("Could not delete local file copy ", err)
 			} else {
