@@ -9,12 +9,12 @@ Problem: my university uses a number of platforms to distribute content to stude
 3. Create a `config.yml` file in the `config` folder, see config section for necessary fields 
 4. Run: `go run main.go`
 
->> Note: first time setup includes authenticating using the credentials of the target Google Drive account. 
+> Note: first time setup includes authenticating using the credentials of the target Google Drive account. 
 
 ## Config 
 
 ```
-drive:
+drive: 
   folders: [
     "Underwater Basket Weaving",
     "Gopher Pictures",
@@ -26,6 +26,6 @@ local:
   credpath: "/Users/vsoltan/Documents/src/moodle-sync/credentials.json"
 ```
 
->> Note: all paths are absolute 
+> Note: all paths are absolute 
 
 

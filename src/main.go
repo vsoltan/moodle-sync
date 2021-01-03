@@ -50,7 +50,7 @@ func main() {
 					folderID, err := gdrive.GetOrCreateFolder(srv, folderName)
 					if err == nil {
 						log.Println("Folder Id: ", folderID)
-						err = gdrive.Upload(srv, nil, file, event.Name, folderID)
+						err = gdrive.Upload(srv, file, event.Name, folderID)
 						if err == nil {
 							cli.DeleteLocalFileDialog(event.Name)
 						}

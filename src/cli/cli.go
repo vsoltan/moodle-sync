@@ -48,7 +48,7 @@ func ChooseUploadFolder(folderList []string) (folderName string) {
 // DeleteLocalFileDialog opens a dialog to delete local copy of the file after upload
 func DeleteLocalFileDialog(filePath string) {
 	var input string
-	fmt.Printf("Delete file with path %v? (y/n):\n", filePath)
+	fmt.Printf("Delete file with path %v? (y/n): ", filePath)
 	for {
 		fmt.Scan(&input)
 		input = strings.ToLower(input)
@@ -62,6 +62,7 @@ func DeleteLocalFileDialog(filePath string) {
 			}
 			break
 		} else if input == "n" {
+			fmt.Println("Listening...")
 			break
 		} else {
 			fmt.Println("Invalid input, select Y for yes and N for no...")

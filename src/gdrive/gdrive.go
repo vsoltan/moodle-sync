@@ -17,7 +17,7 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
-const smallFileSizeLimit = 5 << (10 * 2)
+const smallFileSizeLimit = 5 << (10 * 2) // 5MB per spec
 const gdriveFolderMimeType = "application/vnd.google-apps.folder"
 
 var mimeTypes = map[string]string{
@@ -76,10 +76,7 @@ func GetOrCreateFolder(srv *drive.Service, foldername string) (folderID string, 
 }
 
 // Upload uploads a file to Google Drive
-func Upload(srv *drive.Service, wg *sync.WaitGroup, file *os.File, localPath, folderID string) (err error) {
-	if wg != nil {
-		defer wg.Done()
-	}
+func Upload(srv *drive.Service, file *os.File, localPath, folderID string) (err error) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)
@@ -178,7 +175,10 @@ func uploadFolder(srv *drive.Service, file *os.File,
 		entryPath = folderPath + "/" + fileInfo.Name()
 		entry, err = os.Open(entryPath)
 		wg.Add(1)
-		go Upload(srv, &wg, entry, entryPath, folderID)
+		go func() {
+			Upload(srv, entry, entryPath, folderID)
+			wg.Done()
+		}()
 	}
 	wg.Wait()
 	return
